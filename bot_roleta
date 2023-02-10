@@ -1,0 +1,155 @@
+import time
+import requests
+import json
+import telegram
+ 
+ultimos_resultados = []
+check_resultados = []
+
+dados = []
+
+def puxar_dados():
+    global ultimos_resultados
+
+    url = "https://casino.betfair.com/api/tables-details"
+    headers = {"cookie": "vid=ce5849a0-6cf2-42c1-b556-f1cf54e64085"}
+    resposta = requests.get(url, headers=headers)
+    dic_resposta = resposta.json()
+    dados = dic_resposta['gameTables']
+    for i in dados:
+        roletas= i['gameTableId']
+        if 'PorROULigh000001' in roletas:
+            chaves = i.keys()
+            if 'lastNumbers' in chaves:
+                ultimos_resultados = i['lastNumbers']
+
+    return ultimos_resultados
+
+def obter_vizinhos(ultimos_resultados):
+    
+    numeros_da_roda = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26]
+
+    for numero in ultimos_resultados:
+        numero = int (numero)
+        indice_numero = numeros_da_roda.index(numero)
+
+
+        vizinho_esquerdo = numeros_da_roda[(indice_numero - 2) % 37]
+        vizinho_esquerdo1 = numeros_da_roda[(indice_numero - 1) % 37]
+        vizinho_direito = numeros_da_roda[(indice_numero + 1) % 37]
+        vizinho_direito1 = numeros_da_roda[(indice_numero + 2) % 37]
+
+    return [vizinho_esquerdo, vizinho_esquerdo1, vizinho_direito, vizinho_direito1]   
+
+
+def analisar_numero(ultimos_resultados):
+    caracteristicas = []
+    for numero in ultimos_resultados:
+        try:
+            numero = int(numero)
+        except ValueError:
+            return "Erro: o valor de entrada deve ser um núemro inteiro"
+        
+        paridade = 'par' if numero % 2 == 0 else 'ímpar'
+        cor = 'vermelho' if numero in (1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36) else 'preto' if numero in (2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35) else 'verde'
+        duzia = 1 if numero in range(1, 13) else 2 if numero in range(13, 25) else 3
+        coluna = 1 if numero in [1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34] else 2 if numero in [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35] else 3
+        numeros_terminal = [i for i in range(0, 37) if int(str(i)[-1]) == int(str(numero)[-1])]
+        vizinhos = obter_vizinhos(ultimos_resultados)
+        caracteristicas.append({'numero' : numero, 'coluna' : coluna, 'duzia' : duzia, 'paridade' : paridade, 'cor' : cor, 'vizinhos' : vizinhos, 'numeros_terminal' : numeros_terminal})
+    dados.append(caracteristicas)
+    return caracteristicas
+
+
+def create_message(indicacao, ultimo_numero):
+    url = 'https://betmidas.net/ptb/games/livecasino/detail/normal/20801/evol_PorROULigh000001_BRL'
+    alerta = f'''🔔🔔🔔🔔CONFIRMADA!!
+🎰 Roleta: <a href="{url}">Roleta Relâmpago Ao Vivo</a>
+🎲 Estratégia: {indicacao}
+👉🏻 Entrar após: {ultimo_numero}
+
+🟡 Cobrir o zero
+⚠️ Aplicar 3 gales'''
+    enviar_alerta(alerta)
+    return alerta
+
+def enviar_aleta():
+    token = '5832662193:AAEOooojdImnIfhnwa3K4tImWPkhvYw4nIM'
+    chat_id = '-1001898560509'
+    bot = telegram.Bot(token=token)
+    bot.send_message(chat_id=chat_id, text=alerta, parse_mode=telegram.Parse.Mode.HTML)
+
+
+
+async def enviar_e_apagar_msg():
+
+    token = '5832662193:AAEOooojdImnIfhnwa3K4tImWPkhvYw4nIM'
+    chat_id = '-1001898560509'
+    bot = telegram.Bot(token=token)
+    text = f'''🚨 Atenção: Possível entrada!
+👉🏻 Entre no Jogo e aguarde a confirmação!
+🚀 Site: https://betmidas.net/ptb/games/livecasino/detail/normal/20801/evol_PorROULigh000001_BRL'''
+    mensagem = bot.send_message(chat_id=chat_id, text=text)
+    await asyncio.sleep(15)
+    bot.delete_message(chat_id=chat_id, message_id=mensagem.message_id)
+
+
+def estrategias():
+    global dados
+    dados = dados[0]
+
+
+    try:
+
+        numero1 = dados[0]['numero']
+        numero2 = dados[1]['numero']
+
+        coluna1 = dados[0]['coluna']
+        coluna2 = dados[1]['coluna']
+        if coluna1 == coluna2:
+            indicacao = f'Estratégia: Quebra de repetição de coluna {coluna1}'
+            ultimo_numero = f'{numero1}'
+            create_message(indicacao, ultimo_numero)
+
+        duzia1 = dados[0]['duzia']
+        duzia2 = dados[1]['duzia']
+        if duzia1 == duzia2:
+            indicacao = f'Estratégia: Quebra de repetição de duzia{duzia1}'
+            ultimo_numero = f'{numero1}'
+            create_message(indicacao, ultimo_numero)
+        
+        paridade1 = dados[0]['paridade']
+        paridade2 = dados[1]['paridade']
+        paridade3 = dados[2]['paridade']
+        if paridade1 == paridade2 == paridade3:
+            indicacao = f'Estratégia: Quebra de repetição de paridade{paridade1}'
+            ultimo_numero = f'{numero1}'
+            create_message(indicacao, ultimo_numero)
+
+        cor1 = dados[0]['cor']
+        cor2 = dados[1]['cor']
+        cor3 = dados[2]['cor']
+        if cor1 == cor2 == cor3:
+            indicacao = f'Estratégia: Quebra de repetição de cor{cor1}'
+            ultimo_numero = f'{numero1}'
+            create_message(indicacao, ultimo_numero)
+
+
+        else:
+            pass
+
+
+    except:
+        print('Error')
+
+
+while True:
+    dados.clear()
+    puxar_dados()
+
+    if ultimos_resultados != check_resultados:
+        enviar_e_apagar_msg()
+        check_resultados = ultimos_resultados
+        caracteristicas = analisar_numero(ultimos_resultados)
+        estrategias()
+    time.sleep(5)
